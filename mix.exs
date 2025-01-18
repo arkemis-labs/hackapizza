@@ -41,6 +41,7 @@ defmodule Hackapizza.MixProject do
       {:hackney, "~> 1.18"},
       {:req, "~> 0.5.5"},
       {:swoosh, "~> 1.11"},
+      {:pgvector, "~> 0.3.0"},
       arke_deps(Mix.env())
     ])
   end

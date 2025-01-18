@@ -50,7 +50,8 @@ config :arke_postgres, ArkePostgres.Repo,
   hostname: System.get_env("DB_HOSTNAME"),
   username: System.get_env("DB_USER"),
   password: System.get_env("DB_PASSWORD"),
-  port: System.get_env("DB_PORT")
+  port: System.get_env("DB_PORT"),
+  types: Hackapizza.PostgrexTypes
 
 # ## Using releases
 #

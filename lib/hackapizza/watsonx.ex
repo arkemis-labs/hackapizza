@@ -4,6 +4,7 @@ defmodule Hackapizza.WatsonX do
   """
 
   @default_model "meta-llama/llama-3-3-70b-instruct"
+  @embedding_models_default "intfloat/multilingual-e5-large"
   @default_timeout 60_000
   @default_parameters %{
     "max_tokens" => 8000,
@@ -26,6 +27,25 @@ defmodule Hackapizza.WatsonX do
 
     with {:ok, token} <- get_iam_token(),
          {:ok, response} <- generate_text(payload, token) do
+      {:ok, response}
+    end
+  end
+
+  def generate_embeddings(text, opts \\ []) do
+    model = Keyword.get(opts, :embedding_models, @embedding_models_default)
+    parameters = Keyword.get(opts, :parameters, @default_parameters)
+
+    payload =
+      Map.merge(
+        %{
+          "model_id" => model,
+          "inputs" => text
+        },
+        parameters
+      )
+
+    with {:ok, token} <- get_iam_token(),
+         {:ok, response} <- get_embeddings(payload, token) do
       {:ok, response}
     end
   end
@@ -123,6 +143,27 @@ defmodule Hackapizza.WatsonX do
          ) do
       {:ok, %{status: 200, body: body}} ->
         {:ok, body}
+    end
+  end
+
+  defp get_embeddings(payload, token) do
+    api_url = System.fetch_env!("WATSONX_API_URL")
+    project_id = System.fetch_env!("WATSONX_PROJECT_ID")
+    endpoint = "#{api_url}/ml/v1/text/embeddings?version=2023-10-25"
+    case Req.post(endpoint,
+           json: Map.put(payload, "project_id", project_id),
+           headers: [
+             {"Authorization", "Bearer #{token}"},
+             {"Content-Type", "application/json"},
+             {"Accept", "application/json"}
+           ],
+           receive_timeout: @default_timeout
+         ) do
+      {:ok, %{status: 200, body: response}} ->
+        {:ok, response}
+
+      error ->
+        {:error, "Failed to generate embeddings: #{inspect(error)}"}
     end
   end
 end
