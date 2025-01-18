@@ -1,0 +1,32 @@
+name: Build hackapizza starter DEV
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["develop"]
+
+jobs:
+  build:
+    name: Build and test
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+      contents: write
+    concurrency:
+      group: ci-${{ github.ref }}
+      cancel-in-progress: true
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Build & push Docker image 🐳
+        uses: mr-smithers-excellent/docker-build-push@v5
+        with:
+          image: hackapizza
+          tags: dev
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+          buildArgs: MIX_ENV=dev
+        env:
+          MIX_ENV: dev
