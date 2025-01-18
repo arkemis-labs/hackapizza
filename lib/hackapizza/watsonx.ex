@@ -116,8 +116,6 @@ defmodule Hackapizza.WatsonX do
       {"Accept", "application/json"}
     ]
 
-    IO.inspect(payload)
-
     case Req.post(endpoint,
            json: Map.put(payload, "project_id", project_id),
            headers: headers,

@@ -47,11 +47,7 @@ defmodule Hackapizza.Rag.DocumentProcessor do
 
     prompt =
       """
-        Segui attentamente queste istruzioni. Devi estrarre le seguenti informazioni dal <DOCUMENTO> che ti fornirò.
-      Crea un file JSON, ovvero una lista di dizionari, uno per ogni elemento sottostante:
-      #{Jason.encode!(schema)}
-      Se un valore non è presente, usa null come valore.
-
+       Devi estrarre le seguenti informazioni dal <DOCUMENTO> che ti fornirò.
       <DOCUMENTO>: #{chef_data}
       """
 
