@@ -36,3 +36,4 @@ erl_crash.dump
 hackapizza-\*.tar
 
 .DS_Store
+log/
