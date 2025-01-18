@@ -4,23 +4,57 @@ defmodule Hackapizza.WatsonX do
   """
 
   @default_model "meta-llama/llama-3-3-70b-instruct"
+  @default_timeout 60_000
   @default_parameters %{
     "max_tokens" => 8000,
-    "temperature" => 0
+    "temperature" => 0,
+    "time_limit" => 120_000
   }
 
   def generate(prompt, opts \\ []) do
     model = Keyword.get(opts, :model, @default_model)
     parameters = Keyword.get(opts, :parameters, @default_parameters)
 
-    payload = %{
-      "model_id" => model,
-      "input" => prompt,
-      "parameters" => parameters
-    }
+    payload =
+      Map.merge(
+        %{
+          "model_id" => model,
+          "input" => prompt
+        },
+        parameters
+      )
 
     with {:ok, token} <- get_iam_token(),
-         {:ok, response} <- make_request(payload, token) do
+         {:ok, response} <- generate_text(payload, token) do
+      {:ok, response}
+    end
+  end
+
+  def generate_structured(prompt, schema, opts \\ []) do
+    model = Keyword.get(opts, :model, @default_model)
+    parameters = Keyword.get(opts, :parameters, @default_parameters)
+
+    system_prompt = """
+    You are a structured data extractor. Your response must be valid JSON that matches this schema:
+    #{Jason.encode!(schema)}
+    """
+
+    messages = [
+      %{role: "system", content: system_prompt},
+      %{role: "user", content: prompt}
+    ]
+
+    payload =
+      Map.merge(
+        %{
+          "model_id" => model,
+          "messages" => messages
+        },
+        parameters
+      )
+
+    with {:ok, token} <- get_iam_token(),
+         {:ok, response} <- chat(payload, token) do
       {:ok, response}
     end
   end
@@ -36,7 +70,8 @@ defmodule Hackapizza.WatsonX do
            headers: [
              {"Content-Type", "application/x-www-form-urlencoded"},
              {"Accept", "application/json"}
-           ]
+           ],
+           receive_timeout: 120_000
          ) do
       {:ok, %{status: 200, body: %{"access_token" => token}}} ->
         {:ok, token}
@@ -46,10 +81,10 @@ defmodule Hackapizza.WatsonX do
     end
   end
 
-  defp make_request(payload, token) do
+  defp generate_text(payload, token) do
     api_url = System.fetch_env!("WATSONX_API_URL")
     project_id = System.fetch_env!("WATSONX_PROJECT_ID")
-    endpoint = "#{api_url}/ml/v1/text/generation?version=2023-05-29"
+    endpoint = "#{api_url}/ml/v1/text/generation?version=2023-10-25"
 
     headers = [
       {"Authorization", "Bearer #{token}"},
@@ -59,13 +94,37 @@ defmodule Hackapizza.WatsonX do
 
     case Req.post(endpoint,
            json: Map.put(payload, "project_id", project_id),
-           headers: headers
+           headers: headers,
+           receive_timeout: @default_timeout
          ) do
       {:ok, %{status: 200, body: body}} ->
         {:ok, body}
 
       error ->
         {:error, "WatsonX API request failed: #{inspect(error)}"}
+    end
+  end
+
+  defp chat(payload, token) do
+    api_url = System.fetch_env!("WATSONX_API_URL")
+    project_id = System.fetch_env!("WATSONX_PROJECT_ID")
+    endpoint = "#{api_url}/ml/v1/text/chat?version=2023-10-25"
+
+    headers = [
+      {"Authorization", "Bearer #{token}"},
+      {"Content-Type", "application/json"},
+      {"Accept", "application/json"}
+    ]
+
+    IO.inspect(payload)
+
+    case Req.post(endpoint,
+           json: Map.put(payload, "project_id", project_id),
+           headers: headers,
+           receive_timeout: @default_timeout
+         ) do
+      {:ok, %{status: 200, body: body}} ->
+        {:ok, body}
     end
   end
 end
