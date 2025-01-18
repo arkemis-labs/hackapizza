@@ -2,6 +2,7 @@ defmodule Hackapizza.Rag.DocumentProcessor do
   alias Arke.Boundary.ArkeManager
   alias Arke.StructManager
   alias Arke.QueryManager
+  require Logger
 
   @project_id :jabba_advisor
   @excluded_parameters ["id", "inserted_at", "updated_at", "metadata", "arke_id"]
@@ -51,26 +52,30 @@ defmodule Hackapizza.Rag.DocumentProcessor do
       <DOCUMENTO>: #{chef_data}
       """
 
-    {:ok, data} = Hackapizza.WatsonX.generate_structured(prompt, schema)
+    case Hackapizza.WatsonX.generate_structured(prompt, schema) do
+      {:ok, data} ->
+        {:ok, planet} =
+          QueryManager.create(@project_id, planet, data_as_klist(Map.get(data, "planet")))
 
-    {:ok, planet} =
-      QueryManager.create(@project_id, planet, data_as_klist(Map.get(data, "planet")))
+        {:ok, restaurant} =
+          QueryManager.create(
+            @project_id,
+            restaurant,
+            data_as_klist(Map.put(Map.get(data, "restaurant"), :link_planet, planet.id))
+          )
 
-    {:ok, restaurant} =
-      QueryManager.create(
-        @project_id,
-        restaurant,
-        data_as_klist(Map.put(Map.get(data, "restaurant"), :link_planet, planet.id))
-      )
+        {:ok, chef} =
+          QueryManager.create(
+            @project_id,
+            chef,
+            data_as_klist(Map.put(Map.get(data, "chef"), :link_restaurant, restaurant.id))
+          )
 
-    {:ok, chef} =
-      QueryManager.create(
-        @project_id,
-        chef,
-        data_as_klist(Map.put(Map.get(data, "chef"), :link_restaurant, restaurant.id))
-      )
+        {:ok, %{planet: planet, restaurant: restaurant, chef: chef}}
 
-    {:ok, %{planet: planet, restaurant: restaurant, chef: chef}}
+      {:error, reason} ->
+        {:error, reason}
+    end
   end
 
   @doc """
@@ -94,20 +99,24 @@ defmodule Hackapizza.Rag.DocumentProcessor do
       <DOCUMENTO>: #{dishes_data}
       """
 
-    {:ok, data} = Hackapizza.WatsonX.generate_structured(prompt, schema)
+    case Hackapizza.WatsonX.generate_structured(prompt, schema) do
+      {:ok, data} ->
+        Enum.each(Map.get(data, "dishes"), fn d ->
+          QueryManager.create(@project_id, dish, data_as_klist(Map.put(d, :link_chef, chef_id)))
+        end)
 
-    Enum.each(Map.get(data, "dishes"), fn d ->
-      QueryManager.create(@project_id, dish, data_as_klist(Map.put(d, :link_chef, chef_id)))
-    end)
+        {:ok, data}
 
-    {:ok, data}
+      {:error, reason} ->
+        {:error, reason}
+    end
   end
 
   @doc """
   Process the menu document and creates Planet, Restaurant, Licences, Chef and Dish Arke units.
   It also creates the embedding vectors for each Dish.
   """
-  def process_menu(file_path) do
+  defp process_menu(file_path) do
     with [chef_data | dishes_data] <- split_menu(file_path),
          {:ok, %{chef: chef} = chef_response} <- parse_chef_data(chef_data),
          {:ok, dishes_response} <- parse_dishes_data(dishes_data, chef.id) do
@@ -128,5 +137,40 @@ defmodule Hackapizza.Rag.DocumentProcessor do
         false -> {String.to_existing_atom(key), value}
       end
     end)
+  end
+
+  @doc """
+  Process all menu files in the dataset_md directory.
+  Returns a tuple with successful and failed items.
+  """
+  def process_all_menus do
+    dataset_path = "dataset_md/menu"
+
+    files =
+      File.ls!(dataset_path)
+      |> Enum.filter(&String.ends_with?(&1, ".txt"))
+      |> Enum.sort()
+      |> Enum.map(&Path.join(dataset_path, &1))
+
+    results =
+      Enum.reduce(files, {[], []}, fn file_path, {successes, failures} ->
+        Logger.info("Processing menu file: #{file_path}")
+
+        case process_menu(file_path) do
+          {:ok, result} ->
+            Logger.info("Successfully processed #{file_path}")
+            {[{file_path, result} | successes], failures}
+
+          {:error, reason} ->
+            Logger.error("Failed to process #{file_path}: #{reason}")
+            {successes, [{file_path, reason} | failures]}
+        end
+      end)
+
+    Logger.info(
+      "Menu processing completed. Success: #{length(elem(results, 0))}, Failures: #{length(elem(results, 1))}"
+    )
+
+    results
   end
 end
