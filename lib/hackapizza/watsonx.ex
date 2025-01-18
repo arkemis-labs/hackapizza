@@ -9,7 +9,7 @@ defmodule Hackapizza.WatsonX do
   @default_parameters %{
     "max_tokens" => 8000,
     "temperature" => 0,
-    "time_limit" => 120_000
+    "time_limit" => 240_000
   }
 
   def generate(prompt, opts \\ []) do
@@ -154,6 +154,7 @@ defmodule Hackapizza.WatsonX do
     api_url = System.fetch_env!("WATSONX_API_URL")
     project_id = System.fetch_env!("WATSONX_PROJECT_ID")
     endpoint = "#{api_url}/ml/v1/text/embeddings?version=2023-10-25"
+
     case Req.post(endpoint,
            json: Map.put(payload, "project_id", project_id),
            headers: [
@@ -192,5 +193,4 @@ defmodule Hackapizza.WatsonX do
   end
 
   defp cleanup_chat_response(_), do: {:error, "Invalid response format"}
-
 end
