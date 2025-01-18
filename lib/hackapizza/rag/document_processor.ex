@@ -1,7 +1,7 @@
 defmodule Hackapizza.Rag.DocumentProcessor do
   alias Arke.Boundary.ArkeManager
   alias Arke.StructManager
-  alias Jason
+  alias Arke.QueryManager
 
   @project_id :jabba_advisor
   @excluded_parameters ["id", "inserted_at", "updated_at", "metadata", "arke_id"]
@@ -13,36 +13,36 @@ defmodule Hackapizza.Rag.DocumentProcessor do
     |> String.split("\nMenu\n")
   end
 
-  defp extract_arke_parameters(arke_id) do
-    ArkeManager.get(arke_id, @project_id)
+  defp extract_arke_parameters(arke) do
+    arke
     |> then(& &1.data.parameters)
     |> Enum.reduce(%{}, fn %{arke: parameter, id: id}, acc ->
       parsed_id = to_string(id)
 
-      case Enum.member?(@excluded_parameters, parsed_id) do
+      case Enum.member?(@excluded_parameters, parsed_id) or parameter == :link do
         true -> acc
-        false -> Map.put(acc, parsed_id, parse_link(parameter))
+        false -> Map.put(acc, parsed_id, to_string(parameter))
       end
     end)
   end
-
-  defp parse_link(:link), do: "string"
-  defp parse_link(arke_id), do: to_string(arke_id)
 
   @doc """
   Calls WatsonX to parse Planet, Restaurant Licences and Chef data.
   """
   defp parse_chef_data(chef_data) do
-    planet_parameters = extract_arke_parameters(:planet)
-    chef_parameters = extract_arke_parameters(:chef)
-    restaurant_parameters = extract_arke_parameters(:restaurant)
-    license_parameters = extract_arke_parameters(:license_level)
+    planet = ArkeManager.get(:planet, @project_id)
+    restaurant = ArkeManager.get(:restaurant, @project_id)
+    chef = ArkeManager.get(:chef, @project_id)
+
+    planet_parameters = extract_arke_parameters(planet)
+    chef_parameters = extract_arke_parameters(chef)
+    restaurant_parameters = extract_arke_parameters(restaurant)
 
     schema = %{
-      chef: chef_parameters,
+      # todo: add unit
+      chef: Map.put(chef_parameters, "license", [%{level: "integer", type: "string"}]),
       planet: planet_parameters,
-      restaurant: restaurant_parameters,
-      license_level: [license_parameters]
+      restaurant: restaurant_parameters
     }
 
     prompt =
@@ -51,26 +51,56 @@ defmodule Hackapizza.Rag.DocumentProcessor do
       <DOCUMENTO>: #{chef_data}
       """
 
-    test = Hackapizza.WatsonX.generate_structured(prompt, schema)
+    {:ok, data} = Hackapizza.WatsonX.generate_structured(prompt, schema)
 
-    IO.inspect(test)
+    {:ok, planet} =
+      QueryManager.create(@project_id, planet, data_as_klist(Map.get(data, "planet")))
+
+    {:ok, restaurant} =
+      QueryManager.create(
+        @project_id,
+        restaurant,
+        data_as_klist(Map.put(Map.get(data, "restaurant"), :link_planet, planet.id))
+      )
+
+    {:ok, chef} =
+      QueryManager.create(
+        @project_id,
+        chef,
+        data_as_klist(Map.put(Map.get(data, "chef"), :link_restaurant, restaurant.id))
+      )
+
+    {:ok, %{planet: planet, restaurant: restaurant, chef: chef}}
   end
 
   @doc """
   Calls WatsonX to parse Dishes data with timeout handling.
   """
-  defp parse_dishes_data(dishes_data) do
-    dishes_parameters = extract_arke_parameters(:dish)
+  defp parse_dishes_data(dishes_data, chef_id) do
+    dish = ArkeManager.get(:dish, @project_id)
+
+    schema = %{
+      dishes: [extract_arke_parameters(dish)]
+    }
 
     prompt =
       """
-      Segui attentamente queste istruzioni. Devi estrarre le seguenti informazioni dal <DOCUMENTO> che ti fornirò.
-      Crea un file JSON, ovvero una lista di dizionari, uno per ogni piatto nel documento:
-      - *dish*: #{dishes_parameters}
-      Se un valore non è presente, usa null come valore.
-
+       Devi estrarre le seguenti informazioni dal <DOCUMENTO> che ti fornirò.
+       Il parametro *cult* rappresenta l'ordine alimentare che puo' essere:
+        - 🪐 Ordine della Galassia di Andromeda
+        - 🌱 Ordine dei Naturalisti
+        - 🌈 Ordine degli Armonisti
+        Possono essere rappresentati anche solo con il simbolo dell'ordine e possono trovarsi come legenda nel documento. Se non sono presenti, usa null come valore.
       <DOCUMENTO>: #{dishes_data}
       """
+
+    {:ok, data} = Hackapizza.WatsonX.generate_structured(prompt, schema)
+
+    Enum.each(Map.get(data, "dishes"), fn d ->
+      QueryManager.create(@project_id, dish, data_as_klist(Map.put(d, :link_chef, chef_id)))
+    end)
+
+    {:ok, data}
   end
 
   @doc """
@@ -79,9 +109,9 @@ defmodule Hackapizza.Rag.DocumentProcessor do
   """
   def process_menu(file_path) do
     with [chef_data | dishes_data] <- split_menu(file_path),
-         {:ok, chef_response} <- parse_chef_data(chef_data) do
-      #  {:ok, dishes_response} <- parse_dishes_data(dishes_data) do
-      {:ok, %{chef: chef_response}}
+         {:ok, %{chef: chef} = chef_response} <- parse_chef_data(chef_data),
+         {:ok, dishes_response} <- parse_dishes_data(dishes_data, chef.id) do
+      {:ok, %{chef: dishes_response}}
     else
       {:error, reason} ->
         {:error, "Failed to process menu: #{reason}"}
@@ -89,5 +119,14 @@ defmodule Hackapizza.Rag.DocumentProcessor do
       error ->
         {:error, "Unexpected error: #{inspect(error)}"}
     end
+  end
+
+  defp data_as_klist(data) do
+    Enum.map(data, fn {key, value} ->
+      case is_atom(key) do
+        true -> {key, value}
+        false -> {String.to_existing_atom(key), value}
+      end
+    end)
   end
 end

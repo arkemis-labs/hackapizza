@@ -142,7 +142,11 @@ defmodule Hackapizza.WatsonX do
            receive_timeout: @default_timeout
          ) do
       {:ok, %{status: 200, body: body}} ->
-        {:ok, body}
+        content = get_in(body, ["choices", Access.at(0), "message", "content"])
+        cleanup_chat_response(content)
+
+      error ->
+        {:error, "WatsonX API request failed: #{inspect(error)}"}
     end
   end
 
@@ -166,4 +170,27 @@ defmodule Hackapizza.WatsonX do
         {:error, "Failed to generate embeddings: #{inspect(error)}"}
     end
   end
+
+  defp cleanup_chat_response(content) when is_binary(content) do
+    case Jason.decode(content) do
+      {:ok, parsed_json} ->
+        {:ok, parsed_json}
+
+      {:error, _} ->
+        # Try to extract JSON from the content if it's wrapped in text
+        case Regex.run(~r/\{.*\}/s, content) do
+          [json_str] ->
+            case Jason.decode(json_str) do
+              {:ok, parsed_json} -> {:ok, parsed_json}
+              error -> error
+            end
+
+          nil ->
+            {:error, "Failed to parse JSON from response"}
+        end
+    end
+  end
+
+  defp cleanup_chat_response(_), do: {:error, "Invalid response format"}
+
 end

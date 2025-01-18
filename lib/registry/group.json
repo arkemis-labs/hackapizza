@@ -1,1 +1,21 @@
-{"group":[{"arke_list":["member_public","super_admin"],"description":"Arke Auth Member","id":"arke_auth_member","label":"Arke Auth Member"},{"arke_list":["super_admin"],"description":"Group containing all the arkes which can use the SSO function","id":"enable_sso","label":"Enable SSO"}]}
+{
+    "group": [
+        {
+            "arke_list": [
+                "member_public",
+                "super_admin"
+            ],
+            "description": "Arke Auth Member",
+            "id": "arke_auth_member",
+            "label": "Arke Auth Member"
+        },
+        {
+            "arke_list": [
+                "super_admin"
+            ],
+            "description": "Group containing all the arkes which can use the SSO function",
+            "id": "enable_sso",
+            "label": "Enable SSO"
+        }
+    ]
+}
