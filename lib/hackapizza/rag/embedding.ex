@@ -18,14 +18,14 @@ defmodule Hackapizza.Rag.Embedding do
         end)
 
       Enum.each(planet_restaurants, fn restaurant ->
-        restaurant_dishes =
-          Enum.filter(dishes, fn dish ->
-            dish.data.link_restaurant == to_string(restaurant.id)
-          end)
-
         restaurant_chef =
           Enum.find(chefs, fn chef ->
             chef.data.link_restaurant == to_string(restaurant.id)
+          end)
+
+        restaurant_dishes =
+          Enum.filter(dishes, fn dish ->
+            dish.data.link_chef == to_string(restaurant_chef.id)
           end)
 
         Enum.each(restaurant_dishes, fn dish ->
@@ -50,8 +50,12 @@ defmodule Hackapizza.Rag.Embedding do
     """
   end
 
-  defp format_field(field) when is_list(field), do: Enum.reduce(field, "", fn f, acc -> "#{format_field(f)}, #{acc}" end)
-  defp format_field(field) when is_map(field), do: Enum.map_join(field, " ", fn {k, v} -> "#{parse_key(k)} #{v}" end)
+  defp format_field(field) when is_list(field),
+    do: Enum.reduce(field, "", fn f, acc -> "#{format_field(f)}, #{acc}" end)
+
+  defp format_field(field) when is_map(field),
+    do: Enum.map_join(field, " ", fn {k, v} -> "#{parse_key(k)} #{v}" end)
+
   defp format_field(field) when is_binary(field), do: field
   defp format_field(_), do: ""
 
@@ -65,6 +69,7 @@ defmodule Hackapizza.Rag.Embedding do
     ("id", "cluster", "chunk_number", "embedding")
     VALUES ($1, 'dish', 1, $2)
     """
+
     params = [unit_id, embedding]
     Repo.query(query, params)
   end

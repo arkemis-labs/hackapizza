@@ -116,7 +116,7 @@ defmodule Hackapizza.Rag.DocumentProcessor do
   Process the menu document and creates Planet, Restaurant, Licences, Chef and Dish Arke units.
   It also creates the embedding vectors for each Dish.
   """
-  defp process_menu(file_path) do
+  def process_menu(file_path) do
     with [chef_data | dishes_data] <- split_menu(file_path),
          {:ok, %{chef: chef} = chef_response} <- parse_chef_data(chef_data),
          {:ok, dishes_response} <- parse_dishes_data(dishes_data, chef.id) do
