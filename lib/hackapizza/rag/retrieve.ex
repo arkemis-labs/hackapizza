@@ -8,12 +8,39 @@ defmodule Hackapizza.Rag.Retrieve do
 
   def retrieve_data(query, cluster) when is_binary(cluster), do: retrieve_data(query, [cluster])
   def retrieve_data(query, cluster) do
-    query_embedding = calculate_embedding(query)
+    # Extract relevant entities from query
+    entities = extract_entities(query)
+IO.inspect entities
+    # Calculate embedding using enhanced query
+    query_embedding = calculate_embedding(entities)
+
     ids = Enum.reduce(cluster, [], fn c, acc ->
       contents = retrieve_relevant_documents(query_embedding, c, 5)
       contents ++ acc
     end)
     QueryManager.filter_by(project: @project_id, id__in: ids)
+  end
+
+  defp extract_entities(query) do
+    # Call AI to extract entities
+    prompt = """
+    Extract relevant entities from this query, excluding negated conditions:
+    - Ingredients
+    - Cooking techniques
+    - Restaurant names
+    - Planet names
+
+    Return a text divided by comma
+
+    Query: #{query}
+    """
+
+    case Hackapizza.WatsonX.generate(prompt) do
+      {:ok, response} ->
+        response["results"] |> List.first() |> Map.get("generated_text")
+      _ ->
+        %{} # Return empty map if extraction fails
+    end
   end
   defp retrieve_relevant_documents(query_embedding, cluster, limit) do
 
