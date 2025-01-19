@@ -50,9 +50,14 @@ defmodule Hackapizza.Rag.Embedding do
     """
   end
 
-  defp format_field(field) when is_list(field), do: Enum.join(field, ", ")
+  defp format_field(field) when is_list(field), do: Enum.reduce(field, "", fn f, acc -> "#{format_field(f)}, #{acc}" end)
+  defp format_field(field) when is_map(field), do: Enum.map_join(field, " ", fn {k, v} -> "#{parse_key(k)} #{v}" end)
   defp format_field(field) when is_binary(field), do: field
   defp format_field(_), do: ""
+
+  defp parse_key("level"), do: "Livello"
+  defp parse_key("type"), do: "licenza"
+  defp parse_key(other), do: other
 
   def save_embeddings(embedding, unit_id) do
     query = """
