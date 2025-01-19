@@ -37,21 +37,20 @@ defmodule Hackapizza.Agent.Jabba do
     #   Guido.check_distance(query)
     #   |> enrich_query_with_distance(query)
 
-    query =
+    dataset =
       Retrieve.retrieve_data(query, @clusters)
       # |> exclude_data(query)
       |> parse_dishes()
-      |> enrich_query_with_data(query)
+      # |> enrich_query_with_data(query)
 
     IO.inspect(query)
 
-    case Hackapizza.WatsonX.generate(query,
-           parameters: %{"max_new_tokens" => 1000},
+    case Hackapizza.WatsonX.generate_result(query, dataset,
            max_tokens: 16000
          ) do
       {:ok, response} ->
         IO.inspect(response)
-        response["results"] |> List.first() |> Map.get("generated_text")
+        # response["results"] |> List.first() |> Map.get("generated_text")
 
       _ ->
         ""
@@ -67,22 +66,7 @@ defmodule Hackapizza.Agent.Jabba do
 
   defp enrich_query_with_data(data, query) do
     """
-    Return only the comma-separated list of matching IDs, with no additional text or formatting. Example output: abc1-23,de-f4-56,gh-i78-9
-
-    <DATASET_STRUCTURE>
-    - id: UUID
-    - dish_name: string
-    - ingredients: semicolons-separated list
-    - cooking_methods: semicolons-separated list
-    - origin_planet: string
-    - restaurant_category: string
-    - chef_name: string
-    </DATASET_STRUCTURE>
-
-    <FILTER_RULES>
-    - Each field is separated by commas
-    - Return only the ID if ALL conditions are met
-    </FILTER_RULES>
+    Filtra il <DATASET> a seconda delle condizioni specificate in <QUERY> e ritorna la lista dei nomi dei piatti filtrata
 
     <DATASET>
       #{data}
@@ -97,7 +81,7 @@ defmodule Hackapizza.Agent.Jabba do
   defp parse_dishes(dishes) do
     Enum.reduce(
       dishes,
-      "id,piatto,ingredienti,tecniche,pianeta,ristorante,chef,regimi alimentari",
+      "",
       fn dish, acc ->
         chef = QueryManager.get_by(project: @project_id, id: dish.data.link_chef)
         restaurant = QueryManager.get_by(project: @project_id, id: chef.data.link_restaurant)
@@ -105,16 +89,16 @@ defmodule Hackapizza.Agent.Jabba do
 
         str =
           [
-            to_string(dish.id),
-            dish.data.name,
-            format_field(dish.data.ingredients),
-            format_field(dish.data.techniques),
-            planet.data.name,
-            restaurant.data.name,
-            chef.data.full_name,
-            dish.data.cult || ""
+            # to_string(dish.id),
+            "nome: " <> dish.data.name,
+            "ingredienti: " <> format_field(dish.data.ingredients),
+            "tecniche: " <> format_field(dish.data.techniques),
+            "pianeta: " <> planet.data.name,
+            "ristorante: " <> restaurant.data.name,
+            "chef: " <> chef.data.full_name,
+            "regime alimentare: " <> (dish.data.cult || "")
           ]
-          |> Enum.join(",")
+          |> Enum.join(";")
 
         """
         #{str}
@@ -125,7 +109,7 @@ defmodule Hackapizza.Agent.Jabba do
   end
 
   defp format_field(field) when is_list(field),
-    do: Enum.reduce(field, "", fn f, acc -> "#{format_field(f)}; #{acc}" end)
+    do: Enum.reduce(field, "", fn f, acc -> "#{format_field(f)}, #{acc}" end)
 
   defp format_field(field) when is_map(field),
     do: Enum.map_join(field, " ", fn {k, v} -> "#{parse_key(k)} #{v}" end)
