@@ -15,27 +15,41 @@ defmodule Hackapizza.Solution do
     |> Stream.map(fn {line, index} ->
       # Clean the line from quotes and newlines
       question = line |> String.trim() |> String.trim("\"")
+      {index, question}
+    end)
+    |> Task.async_stream(
+      fn {index, question} ->
+        IO.inspect("run request #{index}: #{question}")
 
-      IO.inspect("run request #{index}: #{question}")
+        response =
+          case Jabba.jabba_work(question) do
+            %{"names" => []} ->
+              %{"names" => res} = Jabba.generate_spicy_result(question)
+              res
 
-      response =
-        case Jabba.jabba_work(question) do
-          %{"names" => []} ->
-            %{"names" => res} = Jabba.generate_spicy_result(question)
-            res
+            %{"names" => response} ->
+              response
+          end
 
-          %{"names" => response} ->
-            response
-        end
-
-      # Format as CSV row
-      [index + 1, response |> Enum.join(",")]
-      |> Enum.join(",")
+        # Format as CSV row
+        [index + 1, response |> Enum.join(",")]
+        |> Enum.join(",")
+      end,
+      max_concurrency: 10, # Limit to 10 simultaneous tasks
+      timeout: :infinity   # Optional: Set timeout for each task
+    )
+    |> Stream.map(fn
+      {:ok, result} -> result
+      {:error, _reason} -> "Error"
     end)
     # Add empty line at end
     |> Stream.concat([""])
     |> Enum.join("\n")
     |> write_results()
+  end
+
+  defp write_results(data) do
+    File.write!("solution_run/results.csv", data)
   end
 
   defp write_results(content) do
