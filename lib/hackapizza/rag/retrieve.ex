@@ -15,7 +15,7 @@ IO.inspect entities
     query_embedding = calculate_embedding(entities)
 
     ids = Enum.reduce(cluster, [], fn c, acc ->
-      contents = retrieve_relevant_documents(query_embedding, c, 5)
+      contents = retrieve_relevant_documents(query_embedding, c, 20)
       contents ++ acc
     end)
     QueryManager.filter_by(project: @project_id, id__in: ids)
