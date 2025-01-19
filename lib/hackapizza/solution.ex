@@ -21,21 +21,13 @@ defmodule Hackapizza.Solution do
       fn {index, question} ->
         IO.inspect("run request #{index}: #{question}")
 
-        response =
-          case Jabba.jabba_work(question) do
-            %{"names" => []} ->
-              %{"names" => res} = Jabba.generate_spicy_result(question)
-              res
-
-            %{"names" => response} ->
-              response
-          end
+        response = IO.inspect Jabba.jabba_work(question)
 
         # Format as CSV row
         [index + 1, response |> Enum.join(",")]
         |> Enum.join(",")
       end,
-      max_concurrency: 10, # Limit to 10 simultaneous tasks
+      max_concurrency: 5, # Limit to 10 simultaneous tasks
       timeout: :infinity   # Optional: Set timeout for each task
     )
     |> Stream.map(fn

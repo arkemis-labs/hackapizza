@@ -39,21 +39,20 @@ defmodule Hackapizza.Agent.Jabba do
 
     dataset =
       Retrieve.retrieve_data(query, @clusters)
-      # |> exclude_data(query)
       |> parse_dishes()
-
-    # |> enrich_query_with_data(query)
 
     IO.inspect(query)
 
     case Hackapizza.WatsonX.generate_result(query, dataset, max_tokens: 16000) do
-      {:ok, response} ->
-        IO.inspect(response)
+      {:ok, %{"names" => []} }->
+        {:ok, %{"names" => res}} = Hackapizza.WatsonX.generate_spicy_result(query, dataset, max_tokens: 16000)
+        res
 
-      # response["results"] |> List.first() |> Map.get("generated_text")
+      {:ok, %{"names" => response} }->
+        response
 
       _ ->
-        ""
+        [""]
     end
   end
 
