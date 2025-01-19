@@ -94,20 +94,25 @@ defmodule Hackapizza.Agent.Jabba do
     Logger.debug("Enriched query", query: enriched_query)
 
     dataset =
-      Retrieve.retrieve_data(query, @clusters)
+      Retrieve.retrieve_data(enriched_query, @clusters)
+      |> tap(fn data -> Logger.debug("Retrieved dataset", size: length(data)) end)
       |> parse_dishes()
+      |> tap(fn parsed -> Logger.debug("Parsed dishes", count: length(parsed)) end)
 
-    IO.inspect(query)
+    case Hackapizza.WatsonX.generate_result(enriched_query, dataset, max_tokens: 16000) do
+      {:ok, %{"names" => []}} ->
+        {:ok, %{"names" => res}} =
+          Hackapizza.WatsonX.generate_spicy_result(query, dataset, max_tokens: 16000)
 
-    case Hackapizza.WatsonX.generate_result(query, dataset, max_tokens: 16000) do
-      {:ok, %{"names" => []} }->
-        {:ok, %{"names" => res}} = Hackapizza.WatsonX.generate_spicy_result(query, dataset, max_tokens: 16000)
+        Logger.info("Successfully generated result", response_length: String.length(res))
         res
 
-      {:ok, %{"names" => response} }->
+      {:ok, %{"names" => response}} ->
+        Logger.info("Successfully generated result", response_length: String.length(response))
         response
 
-      _ ->
+      error ->
+        Logger.warn("Failed to generate result", error: error)
         [""]
     end
   end
