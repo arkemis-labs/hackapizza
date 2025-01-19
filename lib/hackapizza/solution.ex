@@ -19,16 +19,24 @@ defmodule Hackapizza.Solution do
     end)
     |> Task.async_stream(
       fn {index, question} ->
-        IO.inspect("run request #{index}: #{question}")
+        response =
+          case Jabba.query_menu(question) do
+            {:ok, response} ->
+              IO.inspect(response)
+              response
 
-        response = IO.inspect Jabba.jabba_work(question)
+            {:error, _reason} ->
+              [""]
+          end
 
         # Format as CSV row
         [index + 1, response |> Enum.join(",")]
         |> Enum.join(",")
       end,
-      max_concurrency: 5, # Limit to 10 simultaneous tasks
-      timeout: :infinity   # Optional: Set timeout for each task
+      # Limit to 10 simultaneous tasks
+      max_concurrency: 5,
+      # Optional: Set timeout for each task
+      timeout: :infinity
     )
     |> Stream.map(fn
       {:ok, result} -> result

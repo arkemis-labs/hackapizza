@@ -69,8 +69,8 @@ defmodule Hackapizza.Agent.Jabba do
     Logger.debug("Processing menu query", query: query, from: from)
 
     try do
-      results = jabba_work(query)
-      Logger.info("Menu query processed", results_length: String.length(results))
+      {:ok, results} = jabba_work(query)
+      Logger.info("Menu query processed")
       {:reply, {:ok, results}, state}
     catch
       kind, error ->
@@ -104,16 +104,16 @@ defmodule Hackapizza.Agent.Jabba do
         {:ok, %{"names" => res}} =
           Hackapizza.WatsonX.generate_spicy_result(query, dataset, max_tokens: 16000)
 
-        Logger.info("Successfully generated result", response_length: String.length(res))
-        res
+        Logger.info("Successfully generated result")
+        {:ok, res}
 
       {:ok, %{"names" => response}} ->
-        Logger.info("Successfully generated result", response_length: String.length(response))
-        response
+        Logger.info("Successfully generated result")
+        {:ok, response}
 
       error ->
-        Logger.warn("Failed to generate result", error: error)
-        [""]
+        Logger.warning("Failed to generate result", error: error)
+        {:ok, [""]}
     end
   end
 
@@ -122,14 +122,7 @@ defmodule Hackapizza.Agent.Jabba do
     query
   end
 
-  defp enrich_query_with_distance({:ok, %{type: :direct_distance} = result}, query) do
-    """
-    #{query}
-    Considera che la distanza tra #{result.source} e #{result.destination} è #{result.distance} unità.
-    """
-  end
-
-  defp enrich_query_with_distance({:ok, %{type: :radius_search} = result}, query) do
+  defp enrich_query_with_distance({:ok, result}, query) do
     planets =
       result.planets
       |> Enum.map(fn %{planet: planet, distance: dist} ->
@@ -139,7 +132,7 @@ defmodule Hackapizza.Agent.Jabba do
 
     """
     #{query}
-    I pianeti entro #{result.radius} unità da #{result.center} sono: #{planets}.
+    I pianeti da considerare sono: #{planets}.
     """
   end
 

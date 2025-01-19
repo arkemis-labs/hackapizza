@@ -54,7 +54,7 @@ defmodule Hackapizza.Agent.Guido do
           {:reply, {:ok, result}, state}
 
         :error ->
-          Logger.warn("Failed to process distance query", query: query)
+          Logger.warning("Failed to process distance query", query: query)
           {:reply, :bruh, state}
       end
     catch
@@ -65,7 +65,7 @@ defmodule Hackapizza.Agent.Guido do
           stacktrace: __STACKTRACE__
         )
 
-        {:reply, {:error, :processing_failed}, state}
+        {:reply, :bruh, state}
     end
   end
 
