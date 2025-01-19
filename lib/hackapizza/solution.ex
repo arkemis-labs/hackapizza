@@ -41,7 +41,9 @@ defmodule Hackapizza.Solution do
   end
 
   defp write_results(data) do
-    File.write!("solution_run/results.csv", data)
+    timestamp = DateTime.utc_now() |> DateTime.to_string() |> String.replace(~r/[^\d]/, "")
+    filename = "solution_run/results_#{timestamp}.csv"
+    File.write!(filename, data)
   end
 
   defp write_results(content) do
