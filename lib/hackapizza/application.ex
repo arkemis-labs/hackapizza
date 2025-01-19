@@ -13,7 +13,11 @@ defmodule Hackapizza.Application do
       # Start the PubSub system
       {Phoenix.PubSub, name: Hackapizza.PubSub},
       # Start the Endpoint (http/https)
-      HackapizzaWeb.Endpoint
+      HackapizzaWeb.Endpoint,
+      # Start the Jabba agent
+      Hackapizza.Agent.Jabba,
+      # Start the Guido agent
+      Hackapizza.Agent.Guido
       # Start a worker by calling: Hackapizza.Worker.start_link(arg)
       # {Hackapizza.Worker, arg}
     ]
