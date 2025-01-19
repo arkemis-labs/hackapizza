@@ -60,11 +60,11 @@ defmodule Hackapizza.Agent.Guido do
 
   defp process_distance_query(query, distances) do
     case extract_planets_from_query(query) do
-      {:ok, %{"source" => source, "destination" => destination}} ->
-        case get_in(distances, [source, destination]) do
-          nil -> :error
-          distance -> {:ok, %{source: source, destination: destination, distance: distance}}
-        end
+      {:ok, %{"kind" => "sources", "sources" => sources}} ->
+        IO.inspect(sources)
+
+      {:ok, %{"kind" => "planets", "planets" => planets}} ->
+        IO.inspect(planets)
 
       _ ->
         :error
@@ -72,11 +72,30 @@ defmodule Hackapizza.Agent.Guido do
   end
 
   defp extract_planets_from_query(query) do
-    schema = %{
-      "source" => "string",
-      "destination" => "string"
-    }
+    schema =
+      %{
+        "kind" => "planets | sources",
+        "planets" => ["string"],
+        "sources" => %{
+          "source" => "string",
+          "destination" => "string"
+        }
+      }
 
-    WatsonX.generate_structured(query, schema)
+    system_prompt =
+      """
+      Your only responsibility is to extract the source and destination planets from queries about distances between planets.
+      The query must be asking about the distance between two planets, like:
+      - "What's the distance from Tatooine to Asgard?"
+      - "How far is Tatooine from Asgard?"
+      - "Give me the 2 closest planets to Tatooine"
+      - "Distance between Tatooine and Asgard"
+
+      Extract the source and destination planets exactly as written.
+      If the query is not specifically asking about distances between planets, return an error in the following form:
+      {error: "The query is not about planet distances"}
+      """
+
+    WatsonX.generate_structured(query, schema, system_prompt: system_prompt)
   end
 end

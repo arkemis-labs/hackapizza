@@ -39,13 +39,20 @@ defmodule Hackapizza.Agent.Jabba do
 
     query =
       Retrieve.retrieve_data(query, @clusters)
-      #|> exclude_data(query)
+      # |> exclude_data(query)
       |> parse_dishes()
       |> enrich_query_with_data(query)
 
-    case Hackapizza.WatsonX.generate(query) do
+    IO.inspect(query)
+
+    case Hackapizza.WatsonX.generate(query,
+           parameters: %{"max_new_tokens" => 1000},
+           max_tokens: 16000
+         ) do
       {:ok, response} ->
+        IO.inspect(response)
         response["results"] |> List.first() |> Map.get("generated_text")
+
       _ ->
         ""
     end
@@ -60,36 +67,65 @@ defmodule Hackapizza.Agent.Jabba do
 
   defp enrich_query_with_data(data, query) do
     """
-    Use following csv <DATASET>
-    Return the list of id in csv that answer to the <QUERY>
+    Return only the comma-separated list of matching IDs, with no additional text or formatting. Example output: abc1-23,de-f4-56,gh-i78-9
 
-    <DATASET>:
-    #{data}
+    <DATASET_STRUCTURE>
+    - id: UUID
+    - dish_name: string
+    - ingredients: semicolons-separated list
+    - cooking_methods: semicolons-separated list
+    - origin_planet: string
+    - restaurant_category: string
+    - chef_name: string
+    </DATASET_STRUCTURE>
 
-    <QUERY>: #{query}
+    <FILTER_RULES>
+    - Each field is separated by commas
+    - Return only the ID if ALL conditions are met
+    </FILTER_RULES>
+
+    <DATASET>
+      #{data}
+    </DATASET>
+
+    <QUERY>
+     #{query}
+    </QUERY>
     """
   end
 
   defp parse_dishes(dishes) do
-    Enum.reduce(dishes, "id,piatto,ingredienti,tecniche,pianeta,ristorante,chef,regimi alimentari", fn dish, acc ->
-      chef = QueryManager.get_by(project: @project_id, id: dish.data.link_chef)
-      restaurant = QueryManager.get_by(project: @project_id, id: chef.data.link_restaurant)
-      planet = QueryManager.get_by(project: @project_id, id: restaurant.data.link_planet)
-      [
-        to_string(dish.id),
-        dish.data.name,
-        format_field(dish.data.ingredients),
-        format_field(dish.data.techniques),
-        planet.data.name,
-        restaurant.data.name,
-        chef.data.full_name,
-        dish.data.cult || ""
-      ] |> Enum.join(",")
-    end)
+    Enum.reduce(
+      dishes,
+      "id,piatto,ingredienti,tecniche,pianeta,ristorante,chef,regimi alimentari",
+      fn dish, acc ->
+        chef = QueryManager.get_by(project: @project_id, id: dish.data.link_chef)
+        restaurant = QueryManager.get_by(project: @project_id, id: chef.data.link_restaurant)
+        planet = QueryManager.get_by(project: @project_id, id: restaurant.data.link_planet)
+
+        str =
+          [
+            to_string(dish.id),
+            dish.data.name,
+            format_field(dish.data.ingredients),
+            format_field(dish.data.techniques),
+            planet.data.name,
+            restaurant.data.name,
+            chef.data.full_name,
+            dish.data.cult || ""
+          ]
+          |> Enum.join(",")
+
+        """
+        #{str}
+        #{acc}
+        """
+      end
+    )
   end
 
   defp format_field(field) when is_list(field),
-    do: Enum.reduce(field, "", fn f, acc -> "#{format_field(f)}, #{acc}" end)
+    do: Enum.reduce(field, "", fn f, acc -> "#{format_field(f)}; #{acc}" end)
 
   defp format_field(field) when is_map(field),
     do: Enum.map_join(field, " ", fn {k, v} -> "#{parse_key(k)} #{v}" end)
