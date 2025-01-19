@@ -41,16 +41,16 @@ defmodule Hackapizza.Agent.Jabba do
       Retrieve.retrieve_data(query, @clusters)
       # |> exclude_data(query)
       |> parse_dishes()
-      # |> enrich_query_with_data(query)
+
+    # |> enrich_query_with_data(query)
 
     IO.inspect(query)
 
-    case Hackapizza.WatsonX.generate_result(query, dataset,
-           max_tokens: 16000
-         ) do
+    case Hackapizza.WatsonX.generate_result(query, dataset, max_tokens: 16000) do
       {:ok, response} ->
         IO.inspect(response)
-        # response["results"] |> List.first() |> Map.get("generated_text")
+
+      # response["results"] |> List.first() |> Map.get("generated_text")
 
       _ ->
         ""
@@ -81,15 +81,15 @@ defmodule Hackapizza.Agent.Jabba do
   defp parse_dishes(dishes) do
     Enum.reduce(
       dishes,
-      "",
+      [],
       fn dish, acc ->
         chef = QueryManager.get_by(project: @project_id, id: dish.data.link_chef)
         restaurant = QueryManager.get_by(project: @project_id, id: chef.data.link_restaurant)
         planet = QueryManager.get_by(project: @project_id, id: restaurant.data.link_planet)
 
-        str =
+        [
+          # to_string(dish.id),
           [
-            # to_string(dish.id),
             "nome: " <> dish.data.name,
             "ingredienti: " <> format_field(dish.data.ingredients),
             "tecniche: " <> format_field(dish.data.techniques),
@@ -98,14 +98,40 @@ defmodule Hackapizza.Agent.Jabba do
             "chef: " <> chef.data.full_name,
             "regime alimentare: " <> (dish.data.cult || "")
           ]
-          |> Enum.join(";")
-
-        """
-        #{str}
-        #{acc}
-        """
+          |> Enum.join("; ")
+          | acc
+        ]
       end
     )
+
+    # Enum.reduce(
+    #   dishes,
+    #   "",
+    #   fn dish, acc ->
+    #     chef = QueryManager.get_by(project: @project_id, id: dish.data.link_chef)
+    #     restaurant = QueryManager.get_by(project: @project_id, id: chef.data.link_restaurant)
+    #     planet = QueryManager.get_by(project: @project_id, id: restaurant.data.link_planet)
+
+    #     str =
+    #       [
+    #         # to_string(dish.id),
+    #         "nome: " <> dish.data.name,
+    #         "ingredienti: " <> format_field(dish.data.ingredients),
+    #         "tecniche: " <> format_field(dish.data.techniques),
+    #         "pianeta: " <> planet.data.name,
+    #         "ristorante: " <> restaurant.data.name,
+    #         "chef: " <> chef.data.full_name,
+    #         "regime alimentare: " <> (dish.data.cult || "")
+    #       ]
+    #       |> Enum.join(";")
+
+    #     """
+    #     #{str}
+    #     ###
+    #     #{acc}
+    #     """
+    #   end
+    # )
   end
 
   defp format_field(field) when is_list(field),
@@ -117,7 +143,7 @@ defmodule Hackapizza.Agent.Jabba do
   defp format_field(field) when is_binary(field), do: field
   defp format_field(_), do: ""
 
-  defp parse_key("level"), do: "Livello"
+  defp parse_key("level"), do: "Grado"
   defp parse_key("type"), do: "licenza"
   defp parse_key(other), do: other
 end

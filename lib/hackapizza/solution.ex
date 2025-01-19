@@ -2,6 +2,7 @@ defmodule Hackapizza.Solution do
   @moduledoc """
   Module for Solution.
   """
+  alias Hackapizza.Agent.Jabba
 
   def run do
     # Create solution_run directory if it doesn't exist
@@ -15,14 +16,24 @@ defmodule Hackapizza.Solution do
       # Clean the line from quotes and newlines
       question = line |> String.trim() |> String.trim("\"")
 
-      # TODO: Call Jabba agent and get response
-      {:ok, response} = {:ok, nil}
+      IO.inspect("run request #{index}: #{question}")
+
+      response =
+        case Jabba.jabba_work(question) do
+          %{"names" => []} ->
+            %{"names" => res} = Jabba.generate_spicy_result(question)
+            res
+
+          %{"names" => response} ->
+            response
+        end
 
       # Format as CSV row
-      [index + 1, Enum.map(response, & &1.id) |> Enum.join(",")]
+      [index + 1, response |> Enum.join(",")]
       |> Enum.join(",")
     end)
-    |> Stream.concat([""]) # Add empty line at end
+    # Add empty line at end
+    |> Stream.concat([""])
     |> Enum.join("\n")
     |> write_results()
   end

@@ -157,6 +157,204 @@ defmodule Hackapizza.WatsonX do
     end
   end
 
+  def generate_result(prompt, dataset, opts \\ []) do
+    model = Keyword.get(opts, :model, @default_model)
+    parameters = Keyword.get(opts, :parameters, @default_parameters)
+
+    system_prompt = """
+    You are a helpful assistant specialized in filtering and extracting dish names from restaurant data.
+
+    Your task is to:
+    1. Carefully analyze the dataset of dishes that will be provided in the next messages, every messages is a dish and is tagged with <data>
+    2. Filter the dishes based on the provided positive and negative filters structured like {"negative": [""], "positive": [""]} and wrapper in <filter>
+    3. Return ONLY the names of the matching dishes with filter and relevant with the user query
+
+    The filter input will be a JSON object with this structure:
+    {
+      "positive": ["filter1", "filter 2"], // Terms that MUST be matched exactly
+      "negative": ["filter 3 test", "filter4"]  // Terms that MUST NOT be matched
+    }
+
+    Your response must be valid JSON matching this schema:
+    #{Jason.encode!(%{names: []})}
+
+    The response should be:
+    - An array of dish names that match ALL positive filters AND NONE of the negative filters
+    - An empty array [] if no dishes match the criteria
+    - Always properly formatted JSON
+
+    Example:
+    Filter: {"positive": ["Spicy Noodles"], "negative": ["seafood"]}
+    Input: "Retrieve Spicy Noodles dish that no have seefood inside"
+    Response: {"names": ["Spicy Noodles Supreme", "Hot Spicy Noodles"]}
+    // These dishes contain the EXACT phrase "Spicy Noodles" but do NOT contain "seafood"
+
+    Remember:
+    - A dish must match ALL positive filters EXACTLY as provided (including multi-word phrases)
+    - Partial matches are not allowed (e.g. "Spicy Test" will not match "Spicy Testing")
+    - A dish matching ANY negative filter must be excluded
+    - Focus only on extracting dish names that satisfy both conditions
+    """
+
+    content = Enum.map(dataset, &%{role: "system", content: "<data>#{&1}</data>"})
+
+    messages = [
+      %{role: "system", content: system_prompt} | content
+    ]
+
+    messages =
+      messages ++
+        [
+          %{
+            role: "system",
+            content: "<filter>#{Jason.encode!(extract_filter!(prompt))}</filter>"
+          },
+          %{
+            role: "user",
+            content: prompt
+          }
+        ]
+
+    payload =
+      Map.merge(
+        %{
+          "model_id" => model,
+          "messages" => messages
+        },
+        parameters
+      )
+
+    with {:ok, token} <- get_iam_token(),
+         {:ok, response} <- chat(payload, token) do
+      {:ok, response}
+    end
+  end
+
+  def generate_spicy_result(prompt, dataset, opts \\ []) do
+    model = Keyword.get(opts, :model, @default_model)
+    parameters = Keyword.get(opts, :parameters, @default_parameters)
+
+    system_prompt = """
+    You are a helpful assistant specialized in filtering and extracting dish names from restaurant data.
+
+    Your task is to:
+    1. Carefully analyze the dataset of dishes that will be provided in the next messages, every messages is a dish and is tagged with <data>
+    2. Return ONLY data relevant with the user query
+
+    Your response must be valid JSON matching this schema:
+    #{Jason.encode!(%{names: []})}
+
+    The response should be:
+    - An array of dish names that is related to user query
+    - An empty array [] if no dishes match the criteria
+    - Always properly formatted JSON
+
+    Remember:
+    - Focus only on extracting dish names that satisfy user request
+    """
+
+    content = Enum.map(dataset, &%{role: "system", content: "<data>#{&1}</data>"})
+
+    messages = [
+      %{role: "system", content: system_prompt} | content
+    ]
+
+    messages =
+      messages ++
+        [
+          %{
+            role: "user",
+            content: prompt
+          }
+        ]
+
+    payload =
+      Map.merge(
+        %{
+          "model_id" => model,
+          "messages" => messages
+        },
+        parameters
+      )
+
+    with {:ok, token} <- get_iam_token(),
+         {:ok, response} <- chat(payload, token) do
+      {:ok, response}
+    end
+  end
+
+  def extract_filter!(prompt) do
+    case extract_filter(prompt) do
+      {:ok, data} -> data
+      {:error, reason} -> raise(reason)
+    end
+  end
+
+  def extract_filter(prompt, opts \\ []) do
+    model = Keyword.get(opts, :model, @default_model)
+    parameters = Keyword.get(opts, :parameters, @default_parameters)
+
+    system_prompt = """
+    You are a precise filter extractor. Your role is to identify and extract filter conditions from queries.
+
+    Instructions:
+    1. Analyze the input query carefully
+    2. Extract positive and negative filter conditions
+    3. You MUST format your response EXACTLY as shown below:
+    {
+    "positive": ["condition1", "condition2"],
+    "negative": ["condition3"]
+    }
+
+    Rules for JSON formatting:
+    - Use double quotes for strings
+    - Include square brackets even for empty arrays
+    - No trailing commas
+    - No additional whitespace or newlines
+    - No comments or explanations outside the JSON structure
+
+    Example inputs and expected outputs:
+
+    Input: "Show me spicy dishes from Mars and not from Giove"
+    Output: {"positive": ["spicy", "Mars"], "negative": ["Giove"]}
+
+    Input: "Find dishes that are spicy"
+    Output: {"positive": ["spicy"], "negative": []}
+
+    Input: "Show me all dishes"
+    Output: {"positive": [], "negative": []}
+
+    Validation steps before responding:
+    1. Verify the output is valid JSON
+    2. Confirm all strings are in double quotes
+    3. Ensure arrays are properly formatted with square brackets
+    4. Check that only the JSON object is returned, with no additional text
+
+    If you're unsure about any conditions, exclude them rather than risk incorrect formatting.
+    """
+
+    messages =
+      [
+        %{role: "system", content: system_prompt},
+        %{role: "user", content: prompt}
+      ]
+
+    payload =
+      Map.merge(
+        %{
+          "model_id" => model,
+          "messages" => messages
+        },
+        parameters
+      )
+
+    with {:ok, token} <- get_iam_token(),
+         {:ok, response} <- chat(payload, token) do
+      IO.inspect(response, label: "FILTER RESPONSE")
+      {:ok, response}
+    end
+  end
+
   defp get_embeddings(payload, token) do
     api_url = System.fetch_env!("WATSONX_API_URL")
     project_id = System.fetch_env!("WATSONX_PROJECT_ID")
